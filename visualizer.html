@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Atom S3 · Acelerómetro</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&display=swap');
+  :root {
+    --bg:#050508; --panel:#0c0c12; --border:#151522;
+    --x:#ff3a5c; --y:#00e5ff; --z:#69ff47; --mag:#ffb700; --dim:#2a2a3a; --text:#c8c8d8;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:var(--bg); color:var(--text); font-family:'Share Tech Mono',monospace;
+    height:100vh;
+    display:grid;
+    grid-template-rows: 52px 1fr 185px;
+    grid-template-columns: 1fr 170px 260px;
+    gap:1px; background-color:var(--border); overflow:hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    grid-column:1/-1; background:var(--panel);
+    display:flex; align-items:center; padding:0 20px; gap:14px;
+  }
+  header h1 { font-family:'Bebas Neue',sans-serif; font-size:26px; letter-spacing:4px; color:#fff; }
+  #status-dot { width:8px;height:8px;border-radius:50%;background:var(--dim);transition:background 0.3s; }
+  #status-dot.live { background:var(--z);box-shadow:0 0 10px var(--z);animation:pulse 1.5s infinite; }
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}
+  #status-label{font-size:10px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;}
+  #status-label.live{color:var(--z);}
+  #hz-label{margin-left:auto;font-size:10px;letter-spacing:1px;color:var(--dim);}
+
+  /* ── Cavalier (col 1, rows 2) ── */
+  #cavalier-wrap {
+    grid-column:1; grid-row:2;
+    background:var(--panel); position:relative; overflow:hidden;
+  }
+  canvas#cavalier { width:100%; height:100%; display:block; }
+  #reset-heat {
+    position:absolute; bottom:8px; left:8px;
+    font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase;
+    color:var(--dim); background:transparent; border:1px solid var(--dim); padding:3px 8px;
+    cursor:pointer; transition:all 0.2s;
+  }
+  #reset-heat:hover{color:var(--mag);border-color:var(--mag);}
+
+  /* ── 3 Proyecciones apiladas (col 2, row 2) ── */
+  #projections {
+    grid-column:2; grid-row:2;
+    display:grid; grid-template-rows:1fr 1fr 1fr;
+    gap:1px; background:var(--border);
+  }
+  .proj-wrap { background:var(--panel); position:relative; overflow:hidden; }
+  canvas.proj { width:100%; height:100%; display:block; }
+  .proj-label {
+    position:absolute; top:5px; left:7px;
+    font-size:8px; letter-spacing:2px; text-transform:uppercase; opacity:0.8;
+    pointer-events:none;
+  }
+  .proj-label.xy  { color:var(--mag); }
+  .proj-label.xz  { color:var(--x);  }
+  .proj-label.yz  { color:var(--y);  }
+
+  /* ── Sidebar métricas (col 3, row 2) ── */
+  #sidebar {
+    grid-column:3; grid-row:2;
+    background:var(--border); display:flex; flex-direction:column; gap:1px;
+  }
+  .metric {
+    background:var(--panel); padding:12px 18px; flex:1;
+    display:flex; flex-direction:column; justify-content:center; gap:4px;
+  }
+  .metric-label{font-size:9px;letter-spacing:3px;text-transform:uppercase;}
+  .metric-label.x  {color:var(--x);}  .metric-label.y  {color:var(--y);}
+  .metric-label.z  {color:var(--z);}  .metric-label.mag{color:var(--mag);}
+  .metric-value{font-size:24px;font-family:'Bebas Neue',sans-serif;letter-spacing:2px;color:#fff;}
+  .metric-bar-bg{height:2px;background:var(--dim);border-radius:2px;overflow:hidden;}
+  .metric-bar{height:100%;border-radius:2px;transition:width 0.05s linear;}
+  .metric-bar.x  {background:var(--x);}  .metric-bar.y  {background:var(--y);}
+  .metric-bar.z  {background:var(--z);}  .metric-bar.mag{background:var(--mag);}
+
+  /* ── Waveforms (col 1-3, row 3) ── */
+  #waves {
+    grid-column:1/-1; grid-row:3;
+    display:grid; grid-template-columns:1fr 1fr 1fr 1fr;
+    gap:1px; background:var(--border);
+  }
+  .wave-panel{background:var(--panel);padding:7px 12px 5px;display:flex;flex-direction:column;gap:3px;}
+  .wave-header{display:flex;justify-content:space-between;align-items:center;}
+  .wave-label{font-size:9px;letter-spacing:3px;text-transform:uppercase;}
+  .wave-label.x  {color:var(--x);}  .wave-label.y  {color:var(--y);}
+  .wave-label.z  {color:var(--z);}  .wave-label.mag{color:var(--mag);}
+  .wave-scale{font-size:9px;color:var(--dim);}
+  canvas.wave{width:100%;height:90px;display:block;}
+</style>
+</head>
+<body>
+
+<header>
+  <div id="status-dot"></div>
+  <span id="status-label">desconectado</span>
+  <h1>Atom S3 · Acelerómetro</h1>
+  <span id="hz-label">— Hz</span>
+</header>
+
+<!-- Vista caballera -->
+<div id="cavalier-wrap">
+  <canvas id="cavalier"></canvas>
+  <button id="reset-heat">Reset mapa</button>
+</div>
+
+<!-- 3 Proyecciones ortogonales apiladas -->
+<div id="projections">
+  <div class="proj-wrap">
+    <canvas class="proj" id="proj-xy"></canvas>
+    <span class="proj-label xy">XY · sup</span>
+  </div>
+  <div class="proj-wrap">
+    <canvas class="proj" id="proj-xz"></canvas>
+    <span class="proj-label xz">XZ · front</span>
+  </div>
+  <div class="proj-wrap">
+    <canvas class="proj" id="proj-yz"></canvas>
+    <span class="proj-label yz">YZ · lat</span>
+  </div>
+</div>
+
+<!-- Sidebar -->
+<div id="sidebar">
+  <div class="metric">
+    <span class="metric-label x">X · lateral</span>
+    <span class="metric-value" id="val-x">+0.000</span>
+    <div class="metric-bar-bg"><div class="metric-bar x" id="bar-x" style="width:50%"></div></div>
+  </div>
+  <div class="metric">
+    <span class="metric-label y">Y · frontal</span>
+    <span class="metric-value" id="val-y">+0.000</span>
+    <div class="metric-bar-bg"><div class="metric-bar y" id="bar-y" style="width:50%"></div></div>
+  </div>
+  <div class="metric">
+    <span class="metric-label z">Z · vertical</span>
+    <span class="metric-value" id="val-z">+0.000</span>
+    <div class="metric-bar-bg"><div class="metric-bar z" id="bar-z" style="width:50%"></div></div>
+  </div>
+  <div class="metric">
+    <span class="metric-label mag">MAG · total</span>
+    <span class="metric-value" id="val-mag">0.000</span>
+    <div class="metric-bar-bg"><div class="metric-bar mag" id="bar-mag" style="width:0%"></div></div>
+  </div>
+</div>
+
+<!-- Waveforms -->
+<div id="waves">
+  <div class="wave-panel">
+    <div class="wave-header"><span class="wave-label x">X</span><span class="wave-scale" id="scale-x">±1g</span></div>
+    <canvas class="wave" id="wave-x"></canvas>
+  </div>
+  <div class="wave-panel">
+    <div class="wave-header"><span class="wave-label y">Y</span><span class="wave-scale" id="scale-y">±1g</span></div>
+    <canvas class="wave" id="wave-y"></canvas>
+  </div>
+  <div class="wave-panel">
+    <div class="wave-header"><span class="wave-label z">Z</span><span class="wave-scale" id="scale-z">±1g</span></div>
+    <canvas class="wave" id="wave-z"></canvas>
+  </div>
+  <div class="wave-panel">
+    <div class="wave-header"><span class="wave-label mag">MAG</span><span class="wave-scale" id="scale-mag">0–2g</span></div>
+    <canvas class="wave" id="wave-mag"></canvas>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════
+// CONFIG
+// ════════════════════════════════════════════════════════
+const HISTORY      = 300;
+const HEAT_RES     = 80;
+const SCALE_SMOOTH = 0.02;
+const RANGE_SMOOTH = 0.005;
+
+// ════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════
+const series = {x:[],y:[],z:[],mag:[]};
+for(const k of['x','y','z','mag']) series[k]=new Array(HISTORY).fill(0);
+
+const autoScale = {
+  x:{min:-1,max:1}, y:{min:-1,max:1}, z:{min:-1,max:1}, mag:{min:0,max:2}
+};
+
+// Rango dinámico 3D compartido por bola y proyecciones
+const dyn = {xMin:-0.5,xMax:0.5, yMin:-0.5,yMax:0.5, zMin:0.8,zMax:1.2};
+
+function makeHeat() { return {grid:new Float32Array(HEAT_RES*HEAT_RES), max:1}; }
+const heats = {xy:makeHeat(), xz:makeHeat(), yz:makeHeat()};
+
+let lastData = {x:0,y:0,z:1,mag:1};
+let frameCount=0;
+
+// ════════════════════════════════════════════════════════
+// WEBSOCKET
+// ════════════════════════════════════════════════════════
+const dot  =document.getElementById('status-dot');
+const label=document.getElementById('status-label');
+const hzEl =document.getElementById('hz-label');
+
+function connect() {
+  const ws=new WebSocket('ws://127.0.0.1:8765');
+  ws.onopen=()=>{dot.classList.add('live');label.classList.add('live');label.textContent='en vivo';};
+  ws.onmessage=({data:raw})=>{
+    const d=JSON.parse(raw);
+    lastData=d; frameCount++;
+
+    for(const k of['x','y','z','mag']){series[k].push(d[k]);if(series[k].length>HISTORY)series[k].shift();}
+
+    // Sidebar
+    document.getElementById('val-x').textContent  =(d.x>=0?'+':'')+d.x.toFixed(3);
+    document.getElementById('val-y').textContent  =(d.y>=0?'+':'')+d.y.toFixed(3);
+    document.getElementById('val-z').textContent  =(d.z>=0?'+':'')+d.z.toFixed(3);
+    document.getElementById('val-mag').textContent=d.mag.toFixed(3);
+    const toBar=v=>Math.min(100,Math.max(0,(v+8)/16*100));
+    document.getElementById('bar-x').style.width  =toBar(d.x)+'%';
+    document.getElementById('bar-y').style.width  =toBar(d.y)+'%';
+    document.getElementById('bar-z').style.width  =toBar(d.z)+'%';
+    document.getElementById('bar-mag').style.width=Math.min(100,d.mag/16*100)+'%';
+
+    // Auto-scale waveforms
+    for(const k of['x','y','z']){
+      const s=autoScale[k],v=d[k];
+      if(v<s.min)s.min=v*1.1; if(v>s.max)s.max=v*1.1;
+      s.min+=(Math.min(...series[k])*1.1-s.min)*SCALE_SMOOTH;
+      s.max+=(Math.max(...series[k])*1.1-s.max)*SCALE_SMOOTH;
+      const mid=(s.min+s.max)/2;
+      const minRange=k==='z'?0.3:0.05, half=minRange/2;
+      if(s.max-s.min<minRange){s.min=mid-half;s.max=mid+half;}
+    }
+    autoScale.mag.max+=(Math.max(...series.mag)*1.15-autoScale.mag.max)*SCALE_SMOOTH;
+    if(autoScale.mag.max<0.1)autoScale.mag.max=0.1;
+
+    // Media de cada eje (offset DC = gravedad + posición estática)
+    const meanX=series.x.reduce((a,b)=>a+b,0)/series.x.length;
+    const meanY=series.y.reduce((a,b)=>a+b,0)/series.y.length;
+    const meanZ=series.z.reduce((a,b)=>a+b,0)/series.z.length;
+    // Valores centrados (sin offset DC)
+    const cx0=d.x-meanX, cy0=d.y-meanY, cz0=d.z-meanZ;
+
+    // Rango dinámico 3D sobre señal centrada
+    for(const k of['x','y','z']){
+      const cv={'x':cx0,'y':cy0,'z':cz0}[k];
+      const centeredSeries=series[k].map(v=>v-{'x':meanX,'y':meanY,'z':meanZ}[k]);
+      if(cv<dyn[k+'Min'])dyn[k+'Min']=cv*1.15;
+      if(cv>dyn[k+'Max'])dyn[k+'Max']=cv*1.15;
+      dyn[k+'Min']+=(Math.min(...centeredSeries)*1.15-dyn[k+'Min'])*RANGE_SMOOTH;
+      dyn[k+'Max']+=(Math.max(...centeredSeries)*1.15-dyn[k+'Max'])*RANGE_SMOOTH;
+      const mid=(dyn[k+'Min']+dyn[k+'Max'])/2;
+      if(dyn[k+'Max']-dyn[k+'Min']<0.08){dyn[k+'Min']=mid-0.04;dyn[k+'Max']=mid+0.04;}
+    }
+
+    // Heatmaps y proyecciones usan también valores centrados
+    addHeat(heats.xy, cx0,cy0, dyn.xMin,dyn.xMax, dyn.yMin,dyn.yMax, d.mag);
+    addHeat(heats.xz, cx0,cz0, dyn.xMin,dyn.xMax, dyn.zMin,dyn.zMax, d.mag);
+    addHeat(heats.yz, cy0,cz0, dyn.yMin,dyn.yMax, dyn.zMin,dyn.zMax, d.mag);
+  };
+  ws.onclose=()=>{
+    dot.classList.remove('live');label.classList.remove('live');
+    label.textContent='reconectando...';setTimeout(connect,2000);
+  };
+}
+connect();
+setInterval(()=>{hzEl.textContent=frameCount+' Hz';frameCount=0;},1000);
+
+function addHeat(h,a,b,aMin,aMax,bMin,bMax,mag){
+  const ha=Math.floor((a-aMin)/(aMax-aMin)*(HEAT_RES-1));
+  const hb=Math.floor((b-bMin)/(bMax-bMin)*(HEAT_RES-1));
+  if(ha>=0&&ha<HEAT_RES&&hb>=0&&hb<HEAT_RES) h.grid[hb*HEAT_RES+ha]+=mag*0.5+0.1;
+  const sorted=Array.from(h.grid).filter(v=>v>0).sort((a,b)=>a-b);
+  if(sorted.length>0){
+    const p95=sorted[Math.floor(sorted.length*0.95)]||sorted[sorted.length-1];
+    h.max=Math.max(0.5,p95);
+  }
+}
+
+document.getElementById('reset-heat').addEventListener('click',()=>{
+  for(const k of['xy','xz','yz']){heats[k].grid.fill(0);heats[k].max=1;}
+  Object.assign(dyn,{xMin:-0.05,xMax:0.05,yMin:-0.05,yMax:0.05,zMin:0.9,zMax:1.1});
+});
+
+// ════════════════════════════════════════════════════════
+// HEATMAP COLOR
+// ════════════════════════════════════════════════════════
+function heatColor(t){
+  const stops=[[0,[0,0,80,0]],[0.15,[0,80,180,60]],[0.35,[0,200,200,120]],
+               [0.6,[80,220,50,180]],[0.8,[255,180,0,220]],[1.0,[255,40,0,255]]];
+  let i=0; while(i<stops.length-2&&t>stops[i+1][0])i++;
+  const[t0,c0]=stops[i],[t1,c1]=stops[i+1],f=(t-t0)/(t1-t0);
+  return[c0[0]+(c1[0]-c0[0])*f,c0[1]+(c1[1]-c0[1])*f,
+         c0[2]+(c1[2]-c0[2])*f,c0[3]+(c1[3]-c0[3])*f].map(Math.round);
+}
+const hOS=document.createElement('canvas');hOS.width=hOS.height=HEAT_RES;
+const hOSCtx=hOS.getContext('2d');
+
+function blitHeat(targetCtx,W,H,heat){
+  const img=hOSCtx.createImageData(HEAT_RES,HEAT_RES);
+  for(let i=0;i<heat.grid.length;i++){
+    const t=Math.min(1,heat.grid[i]/heat.max);
+    const[r,g,b,a]=heatColor(t);
+    img.data[i*4]=r;img.data[i*4+1]=g;img.data[i*4+2]=b;img.data[i*4+3]=a;
+  }
+  hOSCtx.putImageData(img,0,0);
+  targetCtx.save();targetCtx.filter='blur(10px)';
+  targetCtx.drawImage(hOS,0,0,W,H);
+  targetCtx.filter='none';targetCtx.restore();
+}
+
+// ════════════════════════════════════════════════════════
+// VISTA CABALLERA
+// Proyección oblicua: X→derecha, Z→arriba, Y→diagonal 45°×0.5
+// Ejes dibujados en esquina inferior izquierda (fixed, no en origen dinámico)
+// ════════════════════════════════════════════════════════
+const cavCanvas=document.getElementById('cavalier');
+const cavCtx=cavCanvas.getContext('2d');
+function resizeCav(){cavCanvas.width=cavCanvas.offsetWidth;cavCanvas.height=cavCanvas.offsetHeight;}
+resizeCav(); window.addEventListener('resize',resizeCav);
+
+function nrm(v,mn,mx){return(v-mn)/(mx-mn)-0.5;}
+
+function cavProject(x,y,z,W,H,scale){
+  const nx=nrm(x,dyn.xMin,dyn.xMax);
+  const ny=nrm(y,dyn.yMin,dyn.yMax);
+  const nz=nrm(z,dyn.zMin,dyn.zMax);
+  return{
+    sx: W/2+(nx+0.5*ny*Math.cos(Math.PI/4))*scale,
+    sy: H/2-(nz+0.5*ny*Math.sin(Math.PI/4))*scale,
+  };
+}
+
+const cavTrail=[];
+
+function drawCavalier(){
+  const W=cavCanvas.width,H=cavCanvas.height,scale=Math.min(W,H)*0.4;
+  cavCtx.clearRect(0,0,W,H);
+
+  // Grid sutil  (el heatmap solo se muestra en las proyecciones ortogonales)
+  cavCtx.strokeStyle='rgba(26,26,46,0.55)';cavCtx.lineWidth=1;
+  for(let i=0;i<W;i+=36){cavCtx.beginPath();cavCtx.moveTo(i,0);cavCtx.lineTo(i,H);cavCtx.stroke();}
+  for(let i=0;i<H;i+=36){cavCtx.beginPath();cavCtx.moveTo(0,i);cavCtx.lineTo(W,i);cavCtx.stroke();}
+
+  const{x,y,z,mag}=lastData;
+  // Restar media DC para centrar la bola
+  const mX=series.x.reduce((a,b)=>a+b,0)/series.x.length;
+  const mY=series.y.reduce((a,b)=>a+b,0)/series.y.length;
+  const mZ=series.z.reduce((a,b)=>a+b,0)/series.z.length;
+  const cx=x-mX, cy=y-mY, cz=z-mZ;
+
+  // Sombras punteadas
+  const{sx,sy}=cavProject(cx,cy,cz,W,H,scale);
+  const shadowZ=cavProject(cx,cy,dyn.zMin,W,H,scale);
+  const shadowY=cavProject(cx,dyn.yMin,cz,W,H,scale);
+  cavCtx.setLineDash([3,6]);cavCtx.lineWidth=0.8;
+  cavCtx.strokeStyle='rgba(105,255,71,0.2)';
+  cavCtx.beginPath();cavCtx.moveTo(sx,sy);cavCtx.lineTo(shadowZ.sx,shadowZ.sy);cavCtx.stroke();
+  cavCtx.strokeStyle='rgba(0,229,255,0.2)';
+  cavCtx.beginPath();cavCtx.moveTo(sx,sy);cavCtx.lineTo(shadowY.sx,shadowY.sy);cavCtx.stroke();
+  cavCtx.setLineDash([]);
+
+  // Trail
+  cavTrail.push({sx,sy,mag});
+  if(cavTrail.length>120)cavTrail.shift();
+
+  // Normalizar magnitudes del trail para escalar los puntos relativamente
+  const trailMags=cavTrail.map(p=>p.mag);
+  const magMin=Math.min(...trailMags);
+  const magMax=Math.max(...trailMags);
+  const magRange=magMax-magMin||0.001;
+
+  cavTrail.forEach((p,i)=>{
+    const t=i/cavTrail.length;                        // 0=más antiguo, 1=más reciente
+    const magNorm=(p.mag-magMin)/magRange;            // 0–1 relativo al trail
+    const alpha=t*0.38;
+    const r=1.5+magNorm*10*t;                        // radio: pequeño si mag baja, grande si alta
+    cavCtx.beginPath();cavCtx.arc(p.sx,p.sy,r,0,Math.PI*2);
+    const heat=Math.floor(t*255);
+    cavCtx.fillStyle=`rgba(${heat},${Math.floor(100+t*100)},${255-heat},${alpha})`;
+    cavCtx.fill();
+  });
+
+  // Esfera
+  const radius=26+mag*5;
+  const grad=cavCtx.createRadialGradient(sx-radius*0.3,sy-radius*0.3,2,sx,sy,radius);
+  const int=Math.min(255,Math.floor(mag*25));
+  grad.addColorStop(0,'rgba(255,255,255,0.93)');
+  grad.addColorStop(0.3,`rgba(${100+int},${180-int/2},255,0.87)`);
+  grad.addColorStop(1,'rgba(6,6,20,0.97)');
+  cavCtx.beginPath();cavCtx.arc(sx,sy,radius,0,Math.PI*2);
+  cavCtx.fillStyle=grad;cavCtx.fill();
+  if(mag>1.5){
+    cavCtx.beginPath();cavCtx.arc(sx,sy,radius+10,0,Math.PI*2);
+    cavCtx.strokeStyle=`rgba(255,183,0,${Math.min(0.9,(mag-1.5)*0.4)})`;
+    cavCtx.lineWidth=3;cavCtx.stroke();
+  }
+
+  // ── Ejes en esquina inferior izquierda (posición fija) ──────────────────
+  const ax=60,ay=H-55;  // origen del triedro en px, esquina inf-izq
+  const aLen=40;
+  const angle=Math.PI/4,ratio=0.5;
+  // X → derecha
+  cavCtx.beginPath();cavCtx.moveTo(ax,ay);cavCtx.lineTo(ax+aLen,ay);
+  cavCtx.strokeStyle='#ff3a5c';cavCtx.lineWidth=2;cavCtx.stroke();
+  cavCtx.fillStyle='#ff3a5c';cavCtx.font='bold 11px Share Tech Mono';
+  cavCtx.fillText('X',ax+aLen+5,ay+4);
+  // Z → arriba
+  cavCtx.beginPath();cavCtx.moveTo(ax,ay);cavCtx.lineTo(ax,ay-aLen);
+  cavCtx.strokeStyle='#69ff47';cavCtx.lineWidth=2;cavCtx.stroke();
+  cavCtx.fillStyle='#69ff47';cavCtx.fillText('Z',ax-14,ay-aLen-2);
+  // Y → diagonal 45° (caballera)
+  const ydx=ratio*aLen*Math.cos(angle+Math.PI); // hacia arriba-izquierda
+  const ydy=-ratio*aLen*Math.sin(angle+Math.PI);
+  cavCtx.beginPath();cavCtx.moveTo(ax,ay);cavCtx.lineTo(ax+ydx,ay+ydy);
+  cavCtx.strokeStyle='#00e5ff';cavCtx.lineWidth=2;cavCtx.stroke();
+  cavCtx.fillStyle='#00e5ff';
+  cavCtx.fillText('Y',ax+ydx-16,ay+ydy-4);
+
+  // Pequeño plano de referencia en el triedro
+  cavCtx.strokeStyle='rgba(255,255,255,0.06)';cavCtx.lineWidth=1;
+  cavCtx.beginPath();cavCtx.moveTo(ax+aLen*0.6,ay);
+  cavCtx.lineTo(ax+aLen*0.6+ydx*0.6,ay+ydy*0.6);
+  cavCtx.lineTo(ax+ydx*0.6,ay+ydy*0.6);
+  cavCtx.stroke();
+
+  requestAnimationFrame(drawCavalier);
+}
+drawCavalier();
+
+// ════════════════════════════════════════════════════════
+// PROYECCIONES ORTOGONALES (3 paneles)
+// ════════════════════════════════════════════════════════
+const projDefs=[
+  {
+    id:'proj-xy',heatKey:'xy',
+    getH:d=>d.x, getV:d=>d.y,
+    rH:()=>[dyn.xMin,dyn.xMax], rV:()=>[dyn.yMin,dyn.yMax],
+    colorH:'#ff3a5c',colorV:'#00e5ff',dot:'#ffb700',
+    lblH:'X',lblV:'Y',
+  },
+  {
+    id:'proj-xz',heatKey:'xz',
+    getH:d=>d.x, getV:d=>d.z,
+    rH:()=>[dyn.xMin,dyn.xMax], rV:()=>[dyn.zMin,dyn.zMax],
+    colorH:'#ff3a5c',colorV:'#69ff47',dot:'#ff3a5c',
+    lblH:'X',lblV:'Z',
+  },
+  {
+    id:'proj-yz',heatKey:'yz',
+    getH:d=>d.y, getV:d=>d.z,
+    rH:()=>[dyn.yMin,dyn.yMax], rV:()=>[dyn.zMin,dyn.zMax],
+    colorH:'#00e5ff',colorV:'#69ff47',dot:'#00e5ff',
+    lblH:'Y',lblV:'Z',
+  },
+];
+
+const projObjs=projDefs.map(def=>{
+  const c=document.getElementById(def.id);
+  return{c,ctx:c.getContext('2d'),def,trail:[]};
+});
+
+function resizeProj(){projObjs.forEach(({c})=>{c.width=c.offsetWidth;c.height=c.offsetHeight;});}
+resizeProj(); window.addEventListener('resize',resizeProj);
+
+function drawProjections(){
+  projObjs.forEach(({c,ctx,def,trail})=>{
+    const W=c.width,H=c.height;
+    ctx.clearRect(0,0,W,H);
+    const[hMin,hMax]=def.rH(),[vMin,vMax]=def.rV();
+    const hR=hMax-hMin||0.001,vR=vMax-vMin||0.001;
+
+    blitHeat(ctx,W,H,heats[def.heatKey]);
+
+    // Grid
+    ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=1;
+    for(let i=1;i<4;i++){
+      ctx.beginPath();ctx.moveTo(W*i/4,0);ctx.lineTo(W*i/4,H);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(0,H*i/4);ctx.lineTo(W,H*i/4);ctx.stroke();
+    }
+    // Ceros
+    const zx=((0-hMin)/hR)*W, zy=(1-(0-vMin)/vR)*H;
+    ctx.strokeStyle='rgba(255,255,255,0.14)';
+    if(zx>=0&&zx<=W){ctx.beginPath();ctx.moveTo(zx,0);ctx.lineTo(zx,H);ctx.stroke();}
+    if(zy>=0&&zy<=H){ctx.beginPath();ctx.moveTo(0,zy);ctx.lineTo(W,zy);ctx.stroke();}
+
+    // Etiquetas de eje en esquinas
+    ctx.font='9px Share Tech Mono';
+    ctx.fillStyle=def.colorH;ctx.fillText(def.lblH+'→',W-22,H-4);
+    ctx.fillStyle=def.colorV;ctx.fillText('↑'+def.lblV,3,13);
+
+    // Valores centrados para la posición del punto
+    const _mX=series.x.reduce((a,b)=>a+b,0)/series.x.length;
+    const _mY=series.y.reduce((a,b)=>a+b,0)/series.y.length;
+    const _mZ=series.z.reduce((a,b)=>a+b,0)/series.z.length;
+    const centeredData={x:lastData.x-_mX, y:lastData.y-_mY, z:lastData.z-_mZ, mag:lastData.mag};
+    // Trail
+    const ph=((def.getH(centeredData)-hMin)/hR)*W;
+    const pv=(1-(def.getV(centeredData)-vMin)/vR)*H;
+    trail.push({ph,pv,mag:lastData.mag});
+    if(trail.length>50)trail.shift();
+    trail.forEach((p,i)=>{
+      const alpha=(i/trail.length)*0.55;
+      ctx.beginPath();ctx.arc(p.ph,p.pv,1.5+p.mag*0.8,0,Math.PI*2);
+      ctx.fillStyle=`rgba(255,183,0,${alpha})`;ctx.fill();
+    });
+
+    // Punto + halo
+    ctx.beginPath();ctx.arc(ph,pv,4,0,Math.PI*2);
+    ctx.fillStyle=def.dot;ctx.fill();
+    ctx.beginPath();ctx.arc(ph,pv,8,0,Math.PI*2);
+    ctx.strokeStyle=def.dot+'55';ctx.lineWidth=1.5;ctx.stroke();
+
+    // Guías al borde
+    ctx.setLineDash([2,4]);ctx.lineWidth=0.7;
+    ctx.strokeStyle=def.colorH+'44';
+    ctx.beginPath();ctx.moveTo(ph,pv);ctx.lineTo(ph,H);ctx.stroke();
+    ctx.strokeStyle=def.colorV+'44';
+    ctx.beginPath();ctx.moveTo(ph,pv);ctx.lineTo(0,pv);ctx.stroke();
+    ctx.setLineDash([]);
+  });
+  requestAnimationFrame(drawProjections);
+}
+drawProjections();
+
+// ════════════════════════════════════════════════════════
+// WAVEFORMS
+// ════════════════════════════════════════════════════════
+const waveCanvases={
+  x:document.getElementById('wave-x'),y:document.getElementById('wave-y'),
+  z:document.getElementById('wave-z'),mag:document.getElementById('wave-mag'),
+};
+const waveColors={x:'#ff3a5c',y:'#00e5ff',z:'#69ff47',mag:'#ffb700'};
+const fillRGB={x:'255,58,92',y:'0,229,255',z:'105,255,71',mag:'255,183,0'};
+const scaleLabels={
+  x:document.getElementById('scale-x'),y:document.getElementById('scale-y'),
+  z:document.getElementById('scale-z'),mag:document.getElementById('scale-mag'),
+};
+
+function resizeWaves(){
+  for(const k of['x','y','z','mag']){
+    waveCanvases[k].width=waveCanvases[k].offsetWidth;
+    waveCanvases[k].height=waveCanvases[k].offsetHeight;
+  }
+}
+resizeWaves(); window.addEventListener('resize',resizeWaves);
+
+function drawWaves(){
+  for(const k of['x','y','z','mag']){
+    const c=waveCanvases[k],cx=c.getContext('2d');
+    const W=c.width,H=c.height;
+    cx.clearRect(0,0,W,H);
+
+    const arr=series[k];
+    // Eliminar offset DC: restar la media (excepto mag)
+    const mean=k==='mag'?0:arr.reduce((a,b)=>a+b,0)/arr.length;
+    const pts=k==='mag'?arr:arr.map(v=>v-mean);
+
+    // Escala sobre señal centrada
+    const cMin=Math.min(...pts),cMax=Math.max(...pts);
+    let mn,mx;
+    if(k==='mag'){mn=autoScale.mag.min;mx=autoScale.mag.max;}
+    else{const a=Math.max(Math.abs(cMin),Math.abs(cMax),0.02);mn=-a*1.2;mx=a*1.2;}
+    const range=mx-mn||0.001;
+
+    // Etiqueta: escala + media actual
+    if(k==='mag')scaleLabels[k].textContent=`0–${mx.toFixed(2)}g`;
+    else scaleLabels[k].textContent=`±${mx.toFixed(2)}g  μ${mean>=0?'+':''}${mean.toFixed(2)}`;
+
+    // Línea de cero centrada
+    const zy=k==='mag'?H-((0-mn)/range*H):H/2;
+    cx.beginPath();cx.moveTo(0,zy);cx.lineTo(W,zy);
+    cx.strokeStyle='rgba(255,255,255,0.10)';cx.lineWidth=1;cx.stroke();
+
+    cx.beginPath();
+    pts.forEach((v,i)=>{const px=i/(HISTORY-1)*W,py=H-((v-mn)/range*H);i===0?cx.moveTo(px,py):cx.lineTo(px,py);});
+    cx.strokeStyle=waveColors[k];cx.lineWidth=1.5;cx.stroke();
+    cx.lineTo(W,H);cx.lineTo(0,H);cx.closePath();
+    cx.fillStyle=`rgba(${fillRGB[k]},0.07)`;cx.fill();
+  }
+  requestAnimationFrame(drawWaves);
+}
+drawWaves();
+</script>
+</body>
+</html>
