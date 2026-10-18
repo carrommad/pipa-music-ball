@@ -18,13 +18,6 @@
 
 ---
 
-## 🔮 The Physical Instrument
-
-![Pipa-Music-Ball Bio-Kinetic Prototype](gallery/sphere_prototype.jpg)
-
-*The Pipa-Music-Ball prototype: translucent frosted sphere housing the M5Stack Atom S3 color LCD core, 6-DoF inertial sensor, and power system, designed for feline interaction and kinetic telemetry translation.*
-
----
 
 ## 🚀 Key Features
 
@@ -84,7 +77,6 @@ pipa-music-ball/
 ├── gallery/
 │   ├── telemetry_dashboard.png   # Real-time visualizer screenshot (live 3D telemetry)
 │   ├── telemetry_dashboard.jpg   # Real-time visualizer screenshot (JPEG format)
-│   └── sphere_prototype.jpg      # Physical prototype hardware photograph
 ├── atom_s3_accel_udp.py          # MicroPython firmware for M5Stack Atom S3
 ├── udp_ws_bridge.py              # Python asyncio UDP-to-WebSocket bridge
 ├── visualizer.html               # Complete real-time browser visualizer & audio synth
