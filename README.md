@@ -10,7 +10,15 @@
 
 ---
 
-## 🐾 The Physical Instrument
+## 📊 Real-Time 3D Telemetry Dashboard
+
+![Pipa-Music-Ball Real-Time 3D Telemetry Dashboard](gallery/telemetry_dashboard.png)
+
+*Real-time browser-based telemetry visualizer (`visualizer.html`) displaying 3D Cavalier trajectory projections, orthogonal heatmaps (XY, XZ, YZ), live metric readouts, and 4-channel scrolling acceleration oscilloscopes.*
+
+---
+
+## 🔮 The Physical Instrument
 
 ![Pipa-Music-Ball Bio-Kinetic Prototype](gallery/sphere_prototype.jpg)
 
@@ -18,15 +26,7 @@
 
 ---
 
-## ⚡ Real-Time 3D Telemetry Dashboard
-
-![Pipa-Music-Ball Real-Time 3D Telemetry Dashboard](gallery/telemetry_dashboard.jpg)
-
-*Real-time browser-based telemetry visualizer (`visualizer.html`) displaying 3D Cavalier trajectory projections, orthogonal heatmaps (XY, XZ, YZ), live metric readouts, and 4-channel scrolling acceleration oscilloscopes.*
-
----
-
-## 🌟 Key Features
+## 🚀 Key Features
 
 - **Embedded Sensor Fusion (M5Stack Atom S3 & MPU6886)**:
   - Low-latency 30Hz register polling of 6-DoF acceleration ($a_x, a_y, a_z$) and angular velocity via MicroPython.
@@ -45,57 +45,58 @@
 
 ---
 
-## 📐 Architecture & Data Flow
+## 🎯 Architecture & Data Flow
 
-```
-┌────────────────────────────────────────┐
-│     Physical Sphere Motion (Play)      │
-└───────────────────┬────────────────────┘
-                    │ Kinetic forces
-                    ▼
-┌────────────────────────────────────────┐
-│      MPU6886 6-DoF Inertial Sensor     │
-└───────────────────┬────────────────────┘
-                    │ I2C Bus @ 30Hz
-                    ▼
-┌────────────────────────────────────────┐
-│   ESP32-S3 Core (atom_s3_accel_udp.py) │
-└───────────────────┬────────────────────┘
-                    │ Binary UDP datagrams (<ffff)
-                    ▼
-┌────────────────────────────────────────┐
-│    Host Bridge (udp_ws_bridge.py)      │
-└─────────┬────────────────────┬─────────┘
-          │ WebSocket          │ WebSocket
-          ▼                    ▼
-┌──────────────────┐  ┌──────────────────┐
-│  3D Visualizer   │  │ Web Audio Synth  │
-│  (Cavalier &     │  │ (Microtonal      │
-│   Oscilloscopes) │  │  Sonification)   │
-└──────────────────┘  └──────────────────┘
+```text
+┌─────────────────────────────────────────┐
+│     Physical Sphere Motion (Play)       │
+└────────────────────┬────────────────────┘
+                     │ Kinetic forces
+                     ▼
+┌─────────────────────────────────────────┐
+│      MPU6886 6-DoF Inertial Sensor      │
+└────────────────────┬────────────────────┘
+                     │ I2C Bus @ 30Hz
+                     ▼
+┌─────────────────────────────────────────┐
+│   ESP32-S3 Core (atom_s3_accel_udp.py)  │
+└────────────────────┬────────────────────┘
+                     │ Binary UDP datagrams (<ffff)
+                     ▼
+┌─────────────────────────────────────────┐
+│    Host Bridge (udp_ws_bridge.py)       │
+└──────────┬───────────────────┬──────────┘
+           │ WebSocket         │ WebSocket
+           ▼                   ▼
+┌────────────────────┐ ┌────────────────────┐
+│  3D Visualizer     │ │ Web Audio Synth    │
+│  (Cavalier &       │ │ (Microtonal        │
+│   Oscilloscopes)   │ │  Sonification)     │
+└────────────────────┘ └────────────────────┘
 ```
 
 ---
 
 ## 📁 Repository Structure
 
-```
+```text
 pipa-music-ball/
 ├── gallery/
-│   ├── sphere_prototype.jpg        # Physical prototype hardware photograph
-│   └── telemetry_dashboard.jpg     # 3D Cavalier visualizer & oscilloscope suite
-├── atom_s3_accel_udp.py            # MicroPython firmware for M5Stack Atom S3
-├── udp_ws_bridge.py                # Python asyncio UDP-to-WebSocket bridge
-├── visualizer.html                 # Complete real-time browser visualizer & audio synth
-├── osc_receiver_test.py            # Standalone diagnostics test listener
-├── secrets.py.example              # Wi-Fi credential template
+│   ├── telemetry_dashboard.png   # Real-time visualizer screenshot (live 3D telemetry)
+│   ├── telemetry_dashboard.jpg   # Real-time visualizer screenshot (JPEG format)
+│   └── sphere_prototype.jpg      # Physical prototype hardware photograph
+├── atom_s3_accel_udp.py          # MicroPython firmware for M5Stack Atom S3
+├── udp_ws_bridge.py              # Python asyncio UDP-to-WebSocket bridge
+├── visualizer.html               # Complete real-time browser visualizer & audio synth
+├── osc_receiver_test.py          # Standalone diagnostics test listener
+├── secrets.py.example            # Wi-Fi credential template
 ├── .gitignore
 └── README.md
 ```
 
 ---
 
-## 🚀 Quick Start Guide
+## ⚡ Quick Start Guide
 
 ### 1. Configure & Flash Hardware
 1. Copy `secrets.py.example` to `secrets.py` on your M5Stack Atom S3:
@@ -118,12 +119,12 @@ pipa-music-ball/
 
 ---
 
-## 🛠️ Hardware Bill of Materials (BOM)
+## 🔬 Hardware Bill of Materials (BOM)
 
 | Component | Specification | Function |
 |---|---|---|
 | **Microcontroller Core** | [M5Stack Atom S3](https://docs.m5stack.com/en/core/AtomS3) (ESP32-S3) | 240MHz dual-core, 0.85" color LCD, Wi-Fi |
-| **Inertial Measurement Unit** | MPU6886 | 6-DoF 3-axis accelerometer ($\pm 2g$) & 3-axis gyro |
+| **Inertial Measurement Unit** | MPU6886 | 6-DoF 3-axis accelerometer (±2g) & 3-axis gyro |
 | **Power Supply** | 3.7V LiPo 150mAh battery + step-up regulator | Autonomous wireless operation inside sphere |
 | **Enclosure** | 70mm Frosted Translucent Acrylic Sphere | Rolling bio-kinetic housing for feline interaction |
 
